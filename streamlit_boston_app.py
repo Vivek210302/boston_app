@@ -5,8 +5,8 @@ import joblib
 from pathlib import Path
 
 # Path to dataset
-DATA_PATH = "/data/Boston.csv"
-DEFAULT_MODEL_PATH = "/model/boston.joblib"
+DATA_PATH = "data/Boston.csv"
+DEFAULT_MODEL_PATH = "./model/boston.joblib"
 
 @st.cache_data
 def load_data(path=DATA_PATH):
