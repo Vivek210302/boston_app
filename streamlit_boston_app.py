@@ -44,11 +44,18 @@ def prepare_input(df_row: pd.DataFrame, feature_cols, cat_cols, expected_columns
     - cat_cols: which of those should be treated as categorical
     - expected_columns: if provided, reindex to these columns (fill missing with 0)
     """
-    X_user = df_row[feature_cols].copy()
+    X_user = df_row.copy()
+    # Ensure feature_cols present
+    for c in feature_cols:
+        if c not in X_user.columns:
+            X_user[c] = np.nan
+    X_user = X_user[feature_cols]
+
     # Convert categorical columns to strings
     for c in cat_cols:
         if c in X_user.columns:
             X_user[c] = X_user[c].astype(str)
+
     # One-hot encode categorical cols
     if len(cat_cols) > 0:
         X_user_enc = pd.get_dummies(X_user, columns=cat_cols, drop_first=True)
@@ -62,32 +69,34 @@ def prepare_input(df_row: pd.DataFrame, feature_cols, cat_cols, expected_columns
 
 
 def infer_expected_columns_from_model(model):
-    """Try several heuristics to extract expected feature column names from the loaded model/pipeline.
+    """Try heuristics to extract expected feature column names from the loaded model/pipeline.
     Returns list of column names or None if unknown.
     """
-    # sklearn estimators often have feature_names_in_
+    # sklearn estimators/pipelines often have feature_names_in_
     try:
-        cols = list(model.feature_names_in_)
+        cols = list(getattr(model, 'feature_names_in_'))
         return cols
     except Exception:
         pass
-    # if it's a pipeline or has named_steps, try to inspect final estimator
-    try:
-        if hasattr(model, 'named_steps'):
-            # try to pull columns from the preprocessing step if present
-            # many pipelines accept DataFrame directly; we can't always extract columns
-            final = model
-            # check if model was saved as a dict with metadata
-    except Exception:
-        pass
-    # model might be saved along with metadata dict
+
+    # If the saved object is a dict with metadata, check common keys
     try:
         if isinstance(model, dict):
-            for key in ['feature_names', 'columns', 'feature_columns', 'X_columns']:
+            for key in ['feature_names', 'columns', 'feature_columns', 'X_columns', 'feature_names_in_']:
                 if key in model and isinstance(model[key], (list, tuple)):
                     return list(model[key])
     except Exception:
         pass
+
+    # If it's a pipeline with a final estimator that has feature_names_in_
+    try:
+        if hasattr(model, 'named_steps') and isinstance(model.named_steps, dict):
+            for step in model.named_steps.values():
+                if hasattr(step, 'feature_names_in_'):
+                    return list(getattr(step, 'feature_names_in_'))
+    except Exception:
+        pass
+
     return None
 
 
@@ -159,6 +168,7 @@ def main():
                 maxv = float(ser.max())
                 meanv = float(ser.mean())
                 step = (maxv - minv) / 100.0 if maxv > minv else 1.0
+                # streamlit sliders require the same type for min/max/value; ensure floats
                 input_values[c] = st.slider(f"{c} (continuous)", min_value=minv, max_value=maxv, value=meanv, step=step, key=f"inp_{c}")
         submitted = st.form_submit_button("Save input preview")
 
@@ -231,13 +241,17 @@ def main():
                     st.write(pred)
             except Exception as e:
                 st.error(f"Model prediction failed: {e}")
-                st.write("""Troubleshooting tips:
-                    - Ensure your model pipeline expects the same features and preprocessing you are providing.
-                    - If you used one-hot encoding during training, the saved model may expect the same dummy columns; consider saving the training columns along with the model (e.g., save a dict {'model': model, 'feature_names': feature_names}).
-                    - Try uploading your full pipeline (preprocessing + estimator) so the pipeline can handle raw DataFrame inputs.
-                """)
+                st.write(
+                    """Troubleshooting tips:
+    - Ensure your model pipeline expects the same features and preprocessing you are providing.
+    - If you used one-hot encoding during training, the saved model may expect the same dummy columns; consider saving the training columns along with the model (e.g., save a dict {'model': model, 'feature_names': feature_names}).
+    - Try uploading your full pipeline (preprocessing + estimator) so the pipeline can handle raw DataFrame inputs.
+    """
+                )
+
     st.write("---")
     st.caption("App updated to load an existing joblib model (or upload one) and use it for prediction. Run with: `streamlit run streamlit_boston_app.py`")
+
 
 if __name__ == '__main__':
     main()
