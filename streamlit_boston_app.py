@@ -231,9 +231,11 @@ def main():
                     st.write(pred)
             except Exception as e:
                 st.error(f"Model prediction failed: {e}")
-                st.write("Troubleshooting tips:
+                st.write("""Troubleshooting tips:
 - Ensure your model pipeline expects the same features and preprocessing you are providing.
 - If you used one-hot encoding during training, the saved model may expect the same dummy columns; consider saving the training columns along with the model (e.g., save a dict {'model': model, 'feature_names': feature_names}).
+- Try uploading your full pipeline (preprocessing + estimator) so the pipeline can handle raw DataFrame inputs.
+""").
 - Try uploading your full pipeline (preprocessing + estimator) so the pipeline can handle raw DataFrame inputs.")
 
     st.write("---")
